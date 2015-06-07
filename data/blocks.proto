@@ -1,0 +1,18 @@
+package mf;
+
+message User  {
+  required int32 uid = 1;
+  message Record  {
+    required int32 vid = 1;
+    required float rating = 2;
+  }
+  repeated Record record = 2;
+}
+
+message Block {
+  repeated User user = 1;
+}
+
+message Blocks  {
+  repeated Block block = 1;
+}
