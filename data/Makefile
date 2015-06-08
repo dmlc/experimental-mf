@@ -17,10 +17,10 @@ ifeq ($(OS),Linux)
 	LIB = /opt/intel/mkl/lib/intel64
 endif
 
-SOURCE = data.cc blocks.pb.cc
+SOURCE = getdata.cc blocks.pb.cc
 
 all: $(SOURCE)
-	$(CC) $(CCFLAGS) -I$(INCLUDE) -I$(USR_INCLUDE) -L$(LIB) -L$(USR_LIB) $(SOURCE) -o data $(LDFLAGS) -DDETAILS -fopenmp
+	$(CC) $(CCFLAGS) -I$(USR_INCLUDE) -L$(USR_LIB) $(SOURCE) -o getdata $(LDFLAGS) -DDETAILS -fopenmp
 
 clean:
-	rm -f *.o mf
+	rm -f *.o getdata

@@ -1,8 +1,12 @@
 import os
 from random import shuffle
-fr = open('yahoo_raw_train','r')
-
+########### input ########
 b=10
+raw_data = 'yahoo_raw_train'
+userwise_data = 'yahoo_userwise_train_split%d'%b
+###########################
+
+fr = open(raw_data,'r')
 nr = int(fr.readline())
 for i in range(b):
     f=open('raw%d'%i,'w')
@@ -58,7 +62,7 @@ for i in range(b):
     nn = int(f.readline())
     fn.append(nn)
     fl.append(f)
-fw=open('yahoo_pre_train_%dblocks'%b, 'w')
+fw=open(userwise_data, 'w')
 for i in range(b):
     du={}
     for j in range(b):

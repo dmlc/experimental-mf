@@ -1,9 +1,12 @@
 from random import shuffle
-
+############### input ##############
 b=1
+raw_data = 'raw'
+userwise_data = 'userwise_split%d'%b
+###################################
 
-fr = open('raw_test_data', 'r')
-fw = open('netflix_pre_test_%dblocks'%b, 'w')
+fr = open(raw_data, 'r')
+fw = open(userwise_data, 'w')
 
 line = fr.readline()
 lines = fr.readlines()
