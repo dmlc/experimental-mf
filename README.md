@@ -33,13 +33,19 @@ We support Google's Protobuf as input. Try data/getdata.cc to convert from userw
   where the header indicates the number of ratings, and follows by user_id, item_id and rating in each line.
 
 ## Environment Requirment
-    * GCC 4.9 or higher
+  * GCC 4.9 or higher
+    ```bash
     tar zxf gcc-4.9.2.tar.gz;cd gcc-4.9.2;contrib/download_prerequisites;cd ..;mkdir buildc;cd buildc;../gcc-4.9.2/configure --disable-multilib;make -j 32;sudo make install;cd ..;
-    * Intel TBB
+    ```
+  * Intel TBB
+    ```bash
     sudo apt-get install libtbb-dev
-    * Google Protobuf
+    ```
+  * Google Protobuf
+    ```bash
     sudo apt-get install -y libprotobuf-dev; sudo apt-get install -y protobuf-compiler;
-    * Intel MKL
+    ```
+  * Intel MKL
 
 
 ## Reference
