@@ -10,7 +10,8 @@
 We support Google's Protobuf as input. Try data/getdata.cc to convert from userwise raw data to protobuf format:
 
     ./getdata -r [userwise_raw_data] -w [protobuf_binary] --method [protobuf] --size [int]
-    A sample of userwise raw data looks like:
+  A sample of userwise raw data looks like:
+
     0:
     11,5.0
     21,3.0
