@@ -23,13 +23,14 @@ void read_raw(char* file, std::vector<Tuple>& data) {
     int u,v,t;
     float r;
     fscanf(fp, "%d", &nn);
-    data.resize(nn);
+    data.reserve(nn);
     for(int i=0; i<nn; i++) {
         fscanf(fp, "%d,%d,%f,%d", &u,&v,&r,&t);
         data.push_back(std::make_tuple(u,v,r));
     }
     std::random_shuffle(data.begin(), data.end());
     std::random_shuffle(data.begin(), data.end());
+    fclose(fp);
 }
 
 void write_by_dict(Dict& du, FILE* fp) {
@@ -47,6 +48,7 @@ void write_by_dict(Dict& du, FILE* fp) {
 
 void userwise(char* write, std::vector<Tuple>& data, int nb, int nresd, int bk) {
     int i;
+    FILE* fp = fopen(write, "w");
     for(i=0; i<bk-1; i++) {
         Dict du;
         for(int j=i*nb; j<i*nb+nb; j++) {
@@ -57,9 +59,7 @@ void userwise(char* write, std::vector<Tuple>& data, int nb, int nresd, int bk) 
             du[u].push_back(std::make_pair(v,r));
         }
         //write
-        FILE* fp = fopen(write, "w");
         write_by_dict(du, fp);
-        fclose(fp);
     }
     {
         Dict du;
@@ -71,10 +71,9 @@ void userwise(char* write, std::vector<Tuple>& data, int nb, int nresd, int bk) 
             du[u].push_back(std::make_pair(v,r));
         }
         //write
-        FILE* fp = fopen(write, "w");
         write_by_dict(du, fp);
-        fclose(fp);
     }
+    fclose(fp);
 }
 
 void get_message(char* read, char* write)
