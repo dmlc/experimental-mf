@@ -13,9 +13,6 @@
 #include <mutex>
 #include <atomic>
 #include <tbb/pipeline.h>
-#include <tbb/task_scheduler_init.h>
-#include <tbb/parallel_for.h>
-#include <tbb/blocked_range.h>
 #include "blocks.pb.h"
 #ifdef __APPLE__
 extern "C"
