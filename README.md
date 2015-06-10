@@ -7,7 +7,8 @@
    * Matrix Factorization with Adaptive Regularizer.
 
 ## Data
-    Google's Protobuf as input. Use data/getdata.cc to convert from userwise raw data to protobuf:
+We support Google's Protobuf as input. Try data/getdata.cc to convert from userwise raw data to protobuf format:
+
     ./getdata -r [userwise_raw_data] -w [protobuf_binary] --method [protobuf] --size [int]
     A sample of userwise raw data looks like:
     0:
@@ -16,16 +17,19 @@
     1:
     9,5.0
     12,1.0
-    where there are two users '0' and '1'.
 
-    Or if you only have rating wise raw data, you can first convert to a userwise raw data:
+  where there are two users '0' and '1'.
+
+  Or if you only have rating wise raw data, you can first convert to a userwise raw data:
+
     ./getdata -r [rating_wise_raw] -w [userwise_raw_data] --method [userwise] --split [int]
 
-    A sample of rating_wise_raw data with a header looks like:
+  A sample of rating_wise_raw data with a header looks like:
+
     100000
     0,1,5.0
     0,2,1.0
-    where the header indicates the number of ratings, and follows by user_id, item_id and rating in each line.
+  where the header indicates the number of ratings, and follows by user_id, item_id and rating in each line.
 
 ## Environment Requirment
     * GCC 4.9 or higher
