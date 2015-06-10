@@ -11,14 +11,21 @@ void MF::init() {
   //alloc
   bu_ = (float*)malloc((nu_+nv_)*sizeof(float));
   bv_ = bu_ + nu_;
+
   theta_  = (float**)malloc((nu_+nv_) * sizeof(float*));
-  posix_memalign((void**)&theta_[0], CACHE_LINE_SIZE, (nu_+nv_)*dim_*sizeof(float));
-  for(int i=1; i<nu_; i++)
-    theta_[i] = theta_[i-1] + dim_;
   phi_ = theta_ + nu_;
-  phi_[0] = theta_[nu_-1] + dim_;
-  for(int i=1; i<nv_; i++)
-    phi_[i] = phi_[i-1] + dim_;
+  if(nu_ + nv_ < 1000000) {
+      posix_memalign((void**)&theta_[0], CACHE_LINE_SIZE, (nu_+nv_)*dim_*sizeof(float));
+      for(int i=1; i<nu_; i++)
+      theta_[i] = theta_[i-1] + dim_;
+      phi_[0] = theta_[nu_-1] + dim_;
+      for(int i=1; i<nv_; i++)
+      phi_[i] = phi_[i-1] + dim_;
+  }
+  else {
+    align_alloc(theta_, nu_, dim_);
+    align_alloc(phi_, nv_, dim_);
+  }
   //init
 #pragma omp parallel for
   for(int i=0;i<nu_;i++) {
@@ -71,26 +78,6 @@ float MF::calc_mse(mf::Blocks& blocks, int& ndata) {
       mlock.unlock();
    }
     return sloss;
-}
-
-int MF::plain_read(const char* data, mf::Blocks& blocks) {
-  FILE* fr = fopen(test_data_, "rb");
-  char* buf = (char*)malloc(64000000);
-  uint32 isize;
-  mf::Block* bk;
-  int nn = 0;
-  while(fread(&isize, 1, sizeof(isize), fr)) {
-    fread(buf, 1, isize, fr);
-    bk = blocks.add_block();
-    bk->ParseFromArray(buf, isize);
-    for(int i=0;i<bk->user_size();i++) {
-        const mf::User& user = bk->user(i);
-        nn+=user.record_size();
-    }
-  }
-  free(buf);
-  fclose(fr);
-  return nn;
 }
 
 void MF::read_model() {
@@ -223,14 +210,22 @@ void DPMF::init(mf::Blocks& blocks) {
   vr_ = ur_ + nu_;
   lambda_u_ = vr_ + nv_;
   lambda_v_ = lambda_u_ + dim_;
+
   theta_  = (float**)malloc((nu_+nv_) * sizeof(float*));
-  posix_memalign((void**)&theta_[0], CACHE_LINE_SIZE, (nu_+nv_)*dim_*sizeof(float));
-  for(int i=1; i<nu_; i++)
-    theta_[i] = theta_[i-1] + dim_;
   phi_ = theta_ + nu_;
-  phi_[0] = theta_[nu_-1] + dim_;
-  for(int i=1; i<nv_; i++)
-    phi_[i] = phi_[i-1] + dim_;
+  if(nu_ + nv_ < 1000000) {
+      posix_memalign((void**)&theta_[0], CACHE_LINE_SIZE, (nu_+nv_)*dim_*sizeof(float));
+      for(int i=1; i<nu_; i++)
+      theta_[i] = theta_[i-1] + dim_;
+      phi_[0] = theta_[nu_-1] + dim_;
+      for(int i=1; i<nv_; i++)
+      phi_[i] = phi_[i-1] + dim_;
+  }
+  else {
+    align_alloc(theta_, nu_, dim_);
+    align_alloc(phi_, nv_, dim_);
+  }
+
   //init
 #pragma omp parallel for
   for(int i=0;i<nu_;i++) {
@@ -353,28 +348,25 @@ void DPMF::seteta_cutoff(int round) {
 
 void AdaptRegMF::init1() {
   init();
-  const int piece = 4;
-  int nn = nu_/piece;
 
   bu_old_ = (float*)malloc((nu_+nv_)*sizeof(float));
   bv_old_ = bu_old_ + nu_;
 
-  theta_old_  = (float**)malloc((nu_) * sizeof(float*));
-  posix_memalign((void**)&theta_old_[0], CACHE_LINE_SIZE, (nu_)*dim_*sizeof(float));
-  for(int i=1; i<nu_; i++)
-    theta_old_[i] = theta_old_[i-1] + dim_;
-
-  nn = nv_/piece;
-  phi_old_  = (float**)malloc((nv_) * sizeof(float*));
-  int k;
-  for(k=0;k<piece-1;k++) {
-    posix_memalign((void**)&phi_old_[k*nn], CACHE_LINE_SIZE, (nn)*dim_*sizeof(float));
-    for(int i=1; i<nn; i++)
-      phi_old_[k*nn+i] = phi_old_[k*nn+i-1] + dim_;
+  theta_old_  = (float**)malloc((nu_+nv_) * sizeof(float*));
+  phi_old_ = theta_old_ + nu_;
+  if(nu_ + nv_ < 1000000) {
+      posix_memalign((void**)&theta_old_[0], CACHE_LINE_SIZE, (nu_+nv_)*dim_*sizeof(float));
+      for(int i=1; i<nu_; i++)
+      theta_old_[i] = theta_old_[i-1] + dim_;
+      phi_old_[0] = theta_old_[nu_-1] + dim_;
+      for(int i=1; i<nv_; i++)
+      phi_old_[i] = phi_old_[i-1] + dim_;
   }
-  posix_memalign((void**)&phi_old_[k*nn], CACHE_LINE_SIZE, (nn+nv_%piece)*dim_*sizeof(float));
-  for(int i=1; i<nn+nv_%piece; i++)
-    phi_old_[k*nn+i] = phi_old_[k*nn+i-1] + dim_;
+  else {
+    align_alloc(theta_old_, nu_, dim_);
+    align_alloc(phi_old_, nv_, dim_);
+  }
+
   //init
 #pragma omp parallel for
   for(int i=0;i<nu_;i++) {

@@ -62,6 +62,34 @@ inline void prefetch_range(char *addr, size_t len) {
 }
 #endif
 
+inline void align_alloc(float** u, int nu, int dim) {
+    int piece = nu/1000000+1;
+    int nn = nu/piece;
+    int k;
+    for(k=0; k<piece-1; k++) {
+        posix_memalign((void**)&u[k*nn], CACHE_LINE_SIZE, nn*dim*sizeof(float));
+        for(int i=1; i<nn; i++)
+            u[k*nn+i] = u[k*nn+i-1] + dim;
+    }
+    posix_memalign((void**)&u[k*nn], CACHE_LINE_SIZE, (nn+nu%piece)*dim*sizeof(float));
+    for(int i=1; i<nn+nu%piece; i++)
+        u[k*nn+i] = u[k*nn+i-1] + dim;
+}
+
+inline void plain_read(const char* data, mf::Blocks& blocks) {
+  FILE* fr = fopen(data, "rb");
+  char* buf = (char*)malloc(64000000);
+  uint32 isize;
+  mf::Block* bk;
+  while(fread(&isize, 1, sizeof(isize), fr)) {
+    fread(buf, 1, isize, fr);
+    bk = blocks.add_block();
+    bk->ParseFromArray(buf, isize);
+  }
+  free(buf);
+  fclose(fr);
+}
+
 inline float active(float val, int type) {
   switch(type) {
     case 0: return val;                     //least square

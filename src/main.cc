@@ -7,7 +7,7 @@ void run(MF& mf) {
   mf::Blocks blocks, blocks_test;
   mf.init();
   if(mf.model_ != NULL) mf.read_model();
-  mf.plain_read(mf.test_data_, blocks_test);
+  plain_read(mf.test_data_, blocks_test);
   FILE* fr = fopen(mf.train_data_, "rb");
   SgdReadFilter read_f(blocks, fr, 1, true, mf, blocks_test);
   SgdFilter sgd_f(mf);
@@ -21,7 +21,7 @@ void run(MF& mf) {
 void run(DPMF& dpmf) {
   mf::Blocks blocks, blocks_test;
   dpmf.init(blocks);
-  dpmf.plain_read(dpmf.test_data_, blocks_test);
+  plain_read(dpmf.test_data_, blocks_test);
   if(dpmf.model_ != NULL) dpmf.read_hyper();
   SgldReadFilter read_f(blocks, dpmf);
   SgldFilter sgld_f(dpmf);
@@ -39,7 +39,7 @@ void run(DPMF& dpmf) {
 void run(AdaptRegMF& admf) {
   mf::Blocks blocks, blocks_test, blocks_valid;
   admf.init1();
-  admf.plain_read(admf.test_data_, blocks_test);
+  plain_read(admf.test_data_, blocks_test);
   admf.plain_read_valid(admf.valid_data_, blocks_valid);
   FILE* fr = fopen(admf.train_data_, "rb");
   AdRegReadFilter read_f(blocks, fr, 1, true, admf, blocks_test);

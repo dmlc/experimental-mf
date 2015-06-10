@@ -1,4 +1,4 @@
-alg = 'admf'
+alg = 'mf'
 traindata='../data/netflix_train_10blocks'
 testdata='../data/netflix_test_1blocks'
 validdata='../data/netflix_test_1blocks'

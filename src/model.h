@@ -20,7 +20,6 @@ public:
   void read_model();
   void save_model(int round);
   void seteta(int round);
-  int plain_read(const char* data, mf::Blocks& blocks);
   float **theta_, **phi_, *bu_, *bv_;
   const char * const train_data_, * const test_data_, * const result_, *const model_;
   float gb_;
@@ -66,7 +65,7 @@ public:
   float temp_, mineta_;
   int noise_size_, tau_;
   int ntrain_, ntest_;
-  char pad[64];
+  char pad[CACHE_LINE_SIZE];
   std::atomic<uint64> gcount;
 };
 
@@ -105,11 +104,11 @@ AdaptRegMF(char* train_data, char* test_data, char* valid_data, char* result, ch
     const char* valid_data_;
     float eta_reg_, eta0_reg_;
     int loss_, measure_;
-    char pad1[64];
+    char pad1[CACHE_LINE_SIZE];
     float lam_u_;
-    char pad2[64];
+    char pad2[CACHE_LINE_SIZE];
     float lam_v_;
-    char pad3[64];
+    char pad3[CACHE_LINE_SIZE];
     float lam_b_;
 };
 
