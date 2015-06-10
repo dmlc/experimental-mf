@@ -15,7 +15,7 @@ typedef unsigned long long uint64;
 typedef unsigned int       uint32;
 #define CACHE_LINE_SIZE 64
 
-int block_size = 500;
+int block_size = 1000;
 
 void read_raw(char* file, std::vector<Tuple>& data) {
     FILE* fp = fopen(file, "r");
