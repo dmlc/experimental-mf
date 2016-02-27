@@ -13,10 +13,10 @@ public:
         eta_(eta), eta0_(eta), gam_(gam), lambda_(lambda), gb_(gb),     \
         nu_(nu), nv_(nv), data_in_fly_(fly), prefetch_stride_(stride) {}
   ~MF() {
-    free(theta_[0]), free(theta_), free(bu_);
+    mkl_free(theta_[0]), free(theta_), free(bu_);
   }
   void  init();
-  float calc_mse(mf::Blocks& blocks, int& ndata);
+  float calc_mse(const mf::Blocks& blocks, int& ndata);
   void read_model();
   void save_model(int round);
   void seteta(int round);
@@ -45,25 +45,27 @@ public:
   ~DPMF() {
     free(theta_[0]), free(theta_), free(bu_), free(noise_);
     delete [] gcountu; delete [] gcountv; delete [] gmutex;}
-  void init(mf::Blocks& blocks);
-  void precompute_weight(mf::Blocks& blocks);
+  void init();
+  void block_count(int* uc, int* vc, mf::Block* bk);
+  void sample_train_and_precompute_weight();
   void seteta_cutoff(int round);
   void read_model();
   void read_hyper();
   void save_model(int round);
   void finish_noise();
-  void finish_round(mf::Blocks& blocks, mf::Blocks& blocks_test, int round);
-  void sample_hyper(mf::Blocks& blocks, float mse);
+  void finish_round(mf::Blocks& blocks_test, int round);
+  void sample_hyper(float mse);
   uint64 *gcountu;
   std::atomic<uint64> *gcountv;//128
   std::mutex *gmutex;
   std::uniform_int_distribution<> uniform_int_;
   float *ur_, *vr_, *noise_, *lambda_u_, *lambda_v_;
   const float hyper_a_, hyper_b_;//192
-  float epsilon_, bound_;
-  float lambda_r_, lambda_ub_, lambda_vb_;
+  mf::Blocks train_sample_;
   float temp_, mineta_;
   int noise_size_, tau_;
+  float epsilon_, bound_;
+  float lambda_r_, lambda_ub_, lambda_vb_;
   int ntrain_, ntest_;
   char pad[CACHE_LINE_SIZE];
   std::atomic<uint64> gcount;
@@ -77,11 +79,11 @@ AdaptRegMF(char* train_data, char* test_data, char* valid_data, char* result, ch
         float eta_reg)
      : MF(train_data, test_data, result, model, dim, iter,\
           eta, gam, lambda, gb, nu, nv, fly, stride), valid_data_(valid_data),
-        lam_u_(lambda), lam_v_(lambda), lam_b_(lambda), \
+        lam_u_(lambda), lam_v_(lambda), lam_bu_(lambda), lam_bv_(lambda), \
         loss_(loss), measure_(measure), eta_reg_(eta_reg), eta0_reg_(eta_reg) {}
     ~AdaptRegMF() {}
     void init1();
-    inline void updateReg(int uid, int vid, float rating, float* p) {
+    inline void updateReg(int uid, int vid, float rating) {
         float pred = active( cblas_sdot(dim_, theta_[uid], 1, phi_[vid], 1) + bu_[uid] + bv_[vid] + gb_, loss_);
         float grad = cal_grad(rating, pred, loss_);
         updateUV(grad, uid, vid);
@@ -95,10 +97,11 @@ AdaptRegMF(char* train_data, char* test_data, char* valid_data, char* result, ch
     }
 
     inline void updateBias(float grad, int uid, int vid) {
-        lam_b_ = std::max(0.0f, lam_b_ - eta_reg_*eta_*grad*(bu_old_[uid]+bv_old_[vid]));
+        lam_bu_ = std::max(0.0f, lam_bu_ - eta_reg_*eta_*grad*(bu_old_[uid]));
+        lam_bv_ = std::max(0.0f, lam_bv_ - eta_reg_*eta_*grad*(bv_old_[vid]));
     }
     void set_etareg(int round);
-    void plain_read_valid(const char* valid, mf::Blocks& blocks_valid);
+    void plain_read_valid(const char* valid);
     std::vector<Record> recsv_;
     float **theta_old_, **phi_old_, *bu_old_, *bv_old_;
     const char* valid_data_;
@@ -109,7 +112,9 @@ AdaptRegMF(char* train_data, char* test_data, char* valid_data, char* result, ch
     char pad2[CACHE_LINE_SIZE];
     float lam_v_;
     char pad3[CACHE_LINE_SIZE];
-    float lam_b_;
+    float lam_bu_;
+    char pad4[CACHE_LINE_SIZE];
+    float lam_bv_;
 };
 
 #endif

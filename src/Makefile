@@ -1,8 +1,8 @@
 OS:=$(shell uname -s)
-CC = g++
+CXX = g++
 
-USR_INCLUDE = /usr/local/include
-USR_LIB = /usr/local/lib
+USR_INCLUDE = /home/ziqiliu/include
+USR_LIB = /home/ziqiliu/lib
 
 ifeq ($(OS),Darwin)
 	CCFLAGS = -std=c++11 -O3
@@ -13,14 +13,14 @@ endif
 ifeq ($(OS),Linux)
 	CCFLAGS = -std=c++11 -O3 -m64
 	LDFLAGS = -ltbb -lprotobuf -lmkl_rt -lm
-	INCLUDE = /opt/intel/mkl/include
-	LIB = /opt/intel/mkl/lib/intel64
+	INCLUDE = /home/ziqiliu/intel/mkl/include
+	LIB = /home/ziqiliu/intel/mkl/lib/intel64
 endif
 
 SOURCE = model.cc main.cc blocks.pb.cc
 
 all: $(SOURCE)
-	$(CC) $(CCFLAGS) -I$(INCLUDE) -I$(USR_INCLUDE) -L$(LIB) -L$(USR_LIB) $(SOURCE) -o mf $(LDFLAGS) -DDETAILS -fopenmp
+	$(CXX) $(CCFLAGS) -I$(INCLUDE) -I$(USR_INCLUDE) -L$(LIB) -L$(USR_LIB) $(SOURCE) -o mf $(LDFLAGS) -DDETAILS -fopenmp
 
 clean:
 	rm -f *.o mf

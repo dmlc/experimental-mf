@@ -4,65 +4,44 @@
 #include "model.h"
 
 class AdRegReadFilter: public tbb::filter {
-  mf::Blocks& blocks_;
-  mf::Blocks& blocks_test_;
   AdaptRegMF& admf_;
+  mf::Blocks& blocks_test_;
+  std::vector<std::vector<char> > pool_;
   FILE* fr_;
   uint32 isize_;
-  int iter_, index_;
-  bool f_io_;
-  char* buf_;
+  int iter_, index_, pool_size_;
 public:
-  AdRegReadFilter(mf::Blocks& blocks, FILE* fr, int iter,
-    bool f_io, AdaptRegMF& admf, mf::Blocks& blocks_test)
-    : tbb::filter(serial_in_order), blocks_(blocks), fr_(fr), iter_(iter), index_(0),
-      f_io_(f_io), admf_(admf), blocks_test_(blocks_test)
-  {buf_ = (char*)malloc(64000000);}
-  ~AdRegReadFilter() {
-    free(buf_);
+  AdRegReadFilter(AdaptRegMF& admf, FILE* fr, mf::Blocks& blocks_test)
+    : tbb::filter(serial_in_order), fr_(fr), iter_(1), index_(0),
+      admf_(admf), blocks_test_(blocks_test) {
+      pool_.resize(admf_.data_in_fly_*10);
+      pool_size_ = pool_.size();
   }
-  //Branch misprediction at 1 per iteration
+  ~AdRegReadFilter() {}
   void* operator()(void*) {
-    if(f_io_) {
-      if(fread(&isize_, 1, sizeof(isize_), fr_)) {
-	fread(buf_, 1, isize_, fr_);
-	mf::Block* block = blocks_.add_block();
-	block->ParseFromArray(buf_, isize_);
-	return block;
+      if(fread(&isize_,1,sizeof(isize_),fr_)) {
+          pool_[index_].resize(isize_);
+          fread((char*)pool_[index_].data(),1,isize_,fr_);
+          std::vector<char>& b = pool_[index_++];
+          index_ %= pool_size_;
+          return &b;
       }
       else {
-#ifdef DETAILS
-    e = Time::now();
-    int nn;
-	printf("iter#1\t%f\ttRMSE=%f\n",std::chrono::duration<float>(e-s).count(), sqrt(admf_.calc_mse(blocks_test_, nn)*1.0/nn));
-#endif
-	f_io_ = false;
-    admf_.seteta(++iter_);
-    admf_.set_etareg(iter_);
+          e = Time::now();
+          int nn;
+          printf("iter#%d\t%f\ttRMSE=%f\n",iter_,std::chrono::duration<float>(e-s).count(), sqrt(admf_.calc_mse(blocks_test_, nn)*1.0/nn));
+          //printf("iter#%d\t%f\n", iter_, std::chrono::duration<float>(e-s).count());
+          if(iter_==admf_.iter_) return NULL;
+          admf_.seteta(++iter_);
+          admf_.set_etareg(iter_);
+          fseek(fr_,0,SEEK_SET);
+          fread(&isize_,1,sizeof(isize_),fr_);
+          pool_[index_].resize(isize_);
+          fread((char*)pool_[index_].data(),1,isize_,fr_);
+          std::vector<char>& b = pool_[index_++];
+          index_ %= pool_size_;
+          return &b;
       }
-    }
-    if(!f_io_) {
-      if(index_ < blocks_.block_size()) {
-	const mf::Block& bk = blocks_.block(index_++);
-	return (void*)&bk;
-      }
-      else {
-#ifdef DETAILS
-    e = Time::now();
-    int nn;
-	printf("iter#%d\t%f\ttRMSE=%f\n", iter_, std::chrono::duration<float>(e-s).count(), sqrt(admf_.calc_mse(blocks_test_, nn)*1.0/nn));
-	//printf("iter#%d\t%f\n", iter_, std::chrono::duration<float>(e-s).count());
-#endif
-    admf_.seteta(++iter_);
-    admf_.set_etareg(iter_);
-	if(iter_ <= admf_.iter_) {
-	  index_ = 0;
-	  return (void*)&(blocks_.block(index_++));
-	}
-	else
-	  return NULL;
-      }
-    }
   }
 };
 
@@ -71,7 +50,7 @@ class AdRegFilter: public tbb::filter {
 public:
   AdRegFilter(AdaptRegMF& model): tbb::filter(parallel), admf_(model) {}
   void* operator()(void* block) {
-    float q[admf_.dim_]={0.0};
+    float q[admf_.dim_] __attribute__((aligned(CACHE_LINE_SIZE)));
     mf::Block* bk = (mf::Block*)block;
     const float eta = admf_.eta_;
     int vid, j, i;
@@ -97,12 +76,11 @@ public:
             cblas_scopy(admf_.dim_, q, 1, admf_.phi_[vid], 1);
             admf_.bu_old_[uid] = admf_.bu_[uid];
             admf_.bv_old_[vid] = admf_.bv_[vid];
-            admf_.bu_[uid] = (1.0f-eta*admf_.lam_b_)*admf_.bu_[uid] + error;
-            admf_.bv_[vid] = (1.0f-eta*admf_.lam_b_)*admf_.bv_[vid] + error;
-
-            int ii = rand()%admf_.recsv_.size();
-            admf_.updateReg(admf_.recsv_[ii].u_, admf_.recsv_[ii].v_, admf_.recsv_[ii].r_, q);
+            admf_.bu_[uid] = (1.0f-eta*admf_.lam_bu_)*admf_.bu_[uid] + error;
+            admf_.bv_[vid] = (1.0f-eta*admf_.lam_bv_)*admf_.bv_[vid] + error;
         }
+        int ii = rand()%admf_.recsv_.size();
+        admf_.updateReg(admf_.recsv_[ii].u_, admf_.recsv_[ii].v_, admf_.recsv_[ii].r_);
     }
     return NULL;
   }

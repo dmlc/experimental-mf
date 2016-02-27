@@ -12,20 +12,12 @@ void MF::init() {
   bu_ = (float*)malloc((nu_+nv_)*sizeof(float));
   bv_ = bu_ + nu_;
 
+  const int pad = padding(dim_);
+
   theta_  = (float**)malloc((nu_+nv_) * sizeof(float*));
   phi_ = theta_ + nu_;
-  if(nu_ + nv_ < 1000000) {
-      posix_memalign((void**)&theta_[0], CACHE_LINE_SIZE, (nu_+nv_)*dim_*sizeof(float));
-      for(int i=1; i<nu_; i++)
-      theta_[i] = theta_[i-1] + dim_;
-      phi_[0] = theta_[nu_-1] + dim_;
-      for(int i=1; i<nv_; i++)
-      phi_[i] = phi_[i-1] + dim_;
-  }
-  else {
-    align_alloc(theta_, nu_, dim_);
-    align_alloc(phi_, nv_, dim_);
-  }
+  align_alloc(theta_, nu_, pad);
+  align_alloc(phi_, nv_, pad);
   //init
 #pragma omp parallel for
   for(int i=0;i<nu_;i++) {
@@ -46,7 +38,7 @@ void MF::seteta(int round) {
 }
 
 
-float MF::calc_mse(mf::Blocks& blocks, int& ndata) {
+float MF::calc_mse(const mf::Blocks& blocks, int& ndata) {
   std::mutex mlock;
   const int bsize = blocks.block_size();
   float sloss=0.0;
@@ -202,7 +194,7 @@ void DPMF::read_model() {
   fclose(fp);
 }
 
-void DPMF::init(mf::Blocks& blocks) {
+void DPMF::init() {
   //alloc
   bu_ = (float*)malloc((2*(nu_+nv_)+2*dim_)*sizeof(float));
   bv_ = bu_ + nu_;
@@ -211,20 +203,12 @@ void DPMF::init(mf::Blocks& blocks) {
   lambda_u_ = vr_ + nv_;
   lambda_v_ = lambda_u_ + dim_;
 
+  const int pad = padding(dim_);
+
   theta_  = (float**)malloc((nu_+nv_) * sizeof(float*));
   phi_ = theta_ + nu_;
-  if(nu_ + nv_ < 1000000) {
-      posix_memalign((void**)&theta_[0], CACHE_LINE_SIZE, (nu_+nv_)*dim_*sizeof(float));
-      for(int i=1; i<nu_; i++)
-      theta_[i] = theta_[i-1] + dim_;
-      phi_[0] = theta_[nu_-1] + dim_;
-      for(int i=1; i<nv_; i++)
-      phi_[i] = phi_[i-1] + dim_;
-  }
-  else {
-    align_alloc(theta_, nu_, dim_);
-    align_alloc(phi_, nv_, dim_);
-  }
+  align_alloc(theta_, nu_, pad);
+  align_alloc(phi_, nv_, pad);
 
   //init
 #pragma omp parallel for
@@ -245,8 +229,8 @@ void DPMF::init(mf::Blocks& blocks) {
   noise_ = (float*)malloc(sizeof(float)*noise_size_);
 #pragma omp parallel for
   for(int i=0; i<noise_size_; i++) noise_[i] = gaussian(generator);
-  //precompute weights according to training data
-  precompute_weight(blocks);
+  //sample train data and precompute weights according to training data
+  sample_train_and_precompute_weight();
   //bookkeeping
   gcount = 0;
   gcountu = new uint64 [nu_] ();
@@ -260,43 +244,65 @@ void DPMF::init(mf::Blocks& blocks) {
   assert(noise_size_ - tau_*(dim_+1) > 10000);
 }
 
-void DPMF::precompute_weight(mf::Blocks& blocks) {
-    FILE* fr = fopen(train_data_, "rb");
-    uint32 nn;
-    char* buf = (char*)malloc(64000000);
+void DPMF::block_count(int* uc, int* vc, mf::Block *bk) {
     int uid, vid;
+    for(int i=0;i<bk->user_size();i++) {
+        const mf::User& user = bk->user(i);
+        uid = user.uid();
+        const int size = user.record_size();
+        for(int j=0; j<size; j++) {
+            const mf::User_Record& rec = user.record(j);
+            vid = rec.vid();
+            uc[uid] += 1;
+            vc[vid] += 1;
+            ntrain_++;
+        }
+    }
+}
+
+void DPMF::sample_train_and_precompute_weight() {
+    FILE* f = fopen(train_data_, "rb");
+    uint32 isize;
+    mf::Block bk, *pbk;
+    std::vector<char> buf;
+    std::default_random_engine generator;
+    std::uniform_real_distribution<float> distribution(0.0,1.0);
     int uc[nu_] = {0};
     int vc[nv_] = {0};
-    while(fread(&nn,1,sizeof(nn),fr)) {
-        fread(buf, 1, nn, fr);
-        mf::Block* block = blocks.add_block();
-        block->ParseFromArray(buf,nn);
-        for(int i=0;i<block->user_size();i++) {
-            const mf::User& user = block->user(i);
-            uid = user.uid();
-            const int size = user.record_size();
-            for(int j=0; j<size; j++) {
-                const mf::User_Record& rec = user.record(j);
-                vid = rec.vid();
-                uc[uid] += 1;
-                vc[vid] += 1;
-                ntrain_++;
+    while(true) {
+        float ratio = distribution(generator);
+        if(ratio <= 1.0) {
+            pbk = train_sample_.add_block();
+            if(fread(&isize, 1, sizeof(isize), f)) {
+                buf.resize(isize);
+                fread((char*)buf.data(), 1, isize, f);
+                pbk->ParseFromArray(buf.data(), isize);
+                block_count(uc, vc, pbk);
             }
+            else break;
+        }
+        else {
+            if(fread(&isize, 1, sizeof(isize), f)) {
+                buf.resize(isize);
+                fread((char*)buf.data(), 1, isize, f);
+                bk.ParseFromArray(buf.data(), isize);
+                block_count(uc, vc, &bk);
+            }
+            else break;
         }
     }
     for(int i=0;i<nu_;i++) {ur_[i] = (float)ntrain_/uc[i];}
     for(int i=0;i<nv_;i++) {vr_[i] = (float)ntrain_/vc[i];}
-    free(buf);
-    fclose(fr);
+    fclose(f);
 }
 
-void DPMF::finish_round(mf::Blocks& blocks, mf::Blocks& blocks_test, int round) {
+void DPMF::finish_round(mf::Blocks& blocks_test, int round) {
     finish_noise();
     int ntr, nt;
-    float mse = calc_mse(blocks, ntr);
+    float mse = calc_mse(train_sample_, ntr);
     float tmse = calc_mse(blocks_test, nt);
     printf("round #%d\tRMSE=%f\ttRMSE=%f\t", round, sqrt(mse*1.0/ntr), sqrt(tmse*1.0/nt));
-    sample_hyper(blocks, mse);
+    sample_hyper(mse);
     seteta_cutoff(round+1);
     e = Time::now();
     printf("%f\n", std::chrono::duration<float>(e-s).count());
@@ -326,7 +332,7 @@ void DPMF::finish_noise() {
 }
 
 
-void DPMF::sample_hyper(mf::Blocks& blocks, float mse) {
+void DPMF::sample_hyper(float mse) {
     gamma_posterior(lambda_r_, hyper_a_, hyper_b_, mse, ntrain_);
     gamma_posterior(lambda_ub_, hyper_a_, hyper_b_, normsqr(bu_, nu_), nu_);
     gamma_posterior(lambda_vb_, hyper_a_, hyper_b_, normsqr(bv_, nv_), nv_);
@@ -349,23 +355,15 @@ void DPMF::seteta_cutoff(int round) {
 void AdaptRegMF::init1() {
   init();
 
+  const int pad = padding(dim_);
+
   bu_old_ = (float*)malloc((nu_+nv_)*sizeof(float));
   bv_old_ = bu_old_ + nu_;
 
   theta_old_  = (float**)malloc((nu_+nv_) * sizeof(float*));
   phi_old_ = theta_old_ + nu_;
-  if(nu_ + nv_ < 1000000) {
-      posix_memalign((void**)&theta_old_[0], CACHE_LINE_SIZE, (nu_+nv_)*dim_*sizeof(float));
-      for(int i=1; i<nu_; i++)
-      theta_old_[i] = theta_old_[i-1] + dim_;
-      phi_old_[0] = theta_old_[nu_-1] + dim_;
-      for(int i=1; i<nv_; i++)
-      phi_old_[i] = phi_old_[i-1] + dim_;
-  }
-  else {
-    align_alloc(theta_old_, nu_, dim_);
-    align_alloc(phi_old_, nv_, dim_);
-  }
+  align_alloc(theta_old_, nu_, pad);
+  align_alloc(phi_old_, nv_, pad);
 
   //init
 #pragma omp parallel for
@@ -389,33 +387,29 @@ void AdaptRegMF::set_etareg(int round) {
     eta_reg_ = (float)(eta0_reg_ * 1.0/pow(round,gam_));
 }
 
-void AdaptRegMF::plain_read_valid(const char* valid, mf::Blocks& blocks_valid) {
-  FILE* fr = fopen(valid, "rb");
-  char* buf = (char*)malloc(64000000);
-  uint32 isize,usize;
-  mf::Block* bk;
-  int ii=0;
+void AdaptRegMF::plain_read_valid(const char* valid) {
+  FILE* f = fopen(valid, "rb");
+  std::vector<char> buf;
+  uint32 isize;
+  mf::Block bk;
   Record rr;
-  while(fread(&isize, 1, sizeof(isize), fr)) {
-    fread(buf, 1, isize, fr);
-    bk = blocks_valid.add_block();
-    bk->ParseFromArray(buf, isize);
-    usize = bk->user_size();
-    for(int j=0; j<usize; j++) {
-        const mf::User& user = bk->user(j);
-        const int uid = user.uid();
-        const int size = user.record_size();
-        for(int k=0; k<size; k++) {
-            const mf::User_Record& rec = user.record(k);
-            const int vid = rec.vid();
-            rr.u_ = uid;
-            rr.v_ = vid;
-            rr.r_ = (float)rec.rating();
-            recsv_.push_back(rr);
-        }
-    }
+  while(fread(&isize, 1, sizeof(isize), f)) {
+      buf.resize(isize);
+      fread((char*)buf.data(), 1, isize, f);
+      bk.ParseFromArray(buf.data(), isize);
+      for(int i=0; i<bk.user_size(); i++) {
+          const mf::User& user = bk.user(i);
+          const int uid = user.uid();
+          for(int j=0; j<user.record_size(); j++) {
+              const mf::User_Record& rec = user.record(j);
+              rr.u_ = uid;
+              rr.v_ = (int)rec.vid();
+              rr.r_ = (float)rec.rating();
+              recsv_.push_back(rr);
+          }
+      }
+      bk.Clear();
   }
   std::random_shuffle ( recsv_.begin(), recsv_.end() );
-  fclose(fr);
-  free(buf);
+  fclose(f);
 }

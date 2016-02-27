@@ -1,5 +1,6 @@
 #include <iostream>
-#include <string.h>
+#include <fstream>
+#include <string>
 #include <ctime>
 #include <cstdlib>
 #include <algorithm>
@@ -28,6 +29,8 @@ void read_raw(char* file, std::vector<Tuple>& data) {
         fscanf(fp, "%d,%d,%f,%d", &u,&v,&r,&t);
         data.push_back(std::make_tuple(u,v,r));
     }
+    std::random_shuffle(data.begin(), data.end());
+    std::random_shuffle(data.begin(), data.end());
     std::random_shuffle(data.begin(), data.end());
     std::random_shuffle(data.begin(), data.end());
     fclose(fp);
@@ -79,52 +82,45 @@ void userwise(char* write, std::vector<Tuple>& data, int nb, int nresd, int bk) 
 void get_message(char* read, char* write)
 {
     GOOGLE_PROTOBUF_VERIFY_VERSION;
-    FILE* f_r = fopen(read, "r");
+    std::ifstream ins(read);
+    std::string buf;
     FILE* f_w = fopen(write, "wb");
-    char buf[CACHE_LINE_SIZE*10];
-    int len, vid, count=0, ii=0, gc = 0;
+    int len, vid, ii=0;
     float rating;
-    mf::Blocks blocks;
-    mf::Block* block = NULL;
+    mf::Block block;
     mf::User* user = NULL;
     mf::User_Record* record = NULL;
     std::string uncompressed_buffer;
     uint32 uncompressed_size;
-    while (fgets(buf,CACHE_LINE_SIZE*10,f_r)) {
-        len = strlen(buf)-1;
-        if(len==0)
-        break;
-        buf[len]='\0';
+    while (std::getline(ins, buf)) {
+        len = buf.length();
         if(buf[len-1]==':') {
             if(ii%block_size==0) {
-                if(block) {
-                    block->SerializeToString(&uncompressed_buffer);
+                if(block.user_size() > 0) {
+                    block.SerializeToString(&uncompressed_buffer);
                     uncompressed_size = uncompressed_buffer.size();
                     fwrite(&uncompressed_size, 1, sizeof(uncompressed_size), f_w);
                     fwrite(uncompressed_buffer.c_str(), 1, uncompressed_size, f_w);
-                    count+=block->user_size();
                 }
-                block = blocks.add_block();
-                user = block->add_user();
+                block.Clear();
+                user = block.add_user();
             }
             else {
-                user = block->add_user();
+                user = block.add_user();
             }
             ii++;
-            user->set_uid(atoi(buf));
+            user->set_uid(stoi(buf));
             continue;
         }
         record = user->add_record();
-        sscanf(buf, "%d,%f", &vid, &rating);
+        sscanf(buf.c_str(), "%d,%f", &vid, &rating);
         record->set_vid(vid);
         record->set_rating(rating);
     }
-    block->SerializeToString(&uncompressed_buffer);
+    block.SerializeToString(&uncompressed_buffer);
     uncompressed_size = uncompressed_buffer.size();
     fwrite(&uncompressed_size, 1, sizeof(uncompressed_size), f_w);
     fwrite(uncompressed_buffer.c_str(), 1, uncompressed_size, f_w);
-    count+=block->user_size();
-    fclose(f_r);
     fclose(f_w);
     google::protobuf::ShutdownProtobufLibrary();
 }

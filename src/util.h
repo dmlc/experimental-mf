@@ -60,30 +60,30 @@ inline void prefetch_range(char *addr, size_t len) {
 #endif
 
 inline void align_alloc(float** u, int nu, int dim) {
-    int piece = nu/1000000+1;
+    int piece = nu/1050000+1;
     int nn = nu/piece;
     int k;
     for(k=0; k<piece-1; k++) {
-        posix_memalign((void**)&u[k*nn], CACHE_LINE_SIZE, nn*dim*sizeof(float));
+        u[k*nn] = (float*)mkl_malloc(nn*dim*sizeof(float), CACHE_LINE_SIZE);
         for(int i=1; i<nn; i++)
             u[k*nn+i] = u[k*nn+i-1] + dim;
     }
-    posix_memalign((void**)&u[k*nn], CACHE_LINE_SIZE, (nn+nu%piece)*dim*sizeof(float));
+    u[k*nn] = (float*)mkl_malloc((nn+nu%piece)*dim*sizeof(float), CACHE_LINE_SIZE);
     for(int i=1; i<nn+nu%piece; i++)
         u[k*nn+i] = u[k*nn+i-1] + dim;
 }
 
 inline void plain_read(const char* data, mf::Blocks& blocks) {
   FILE* fr = fopen(data, "rb");
-  char* buf = (char*)malloc(64000000);
+  std::vector<char> buf;
   uint32 isize;
   mf::Block* bk;
   while(fread(&isize, 1, sizeof(isize), fr)) {
-    fread(buf, 1, isize, fr);
-    bk = blocks.add_block();
-    bk->ParseFromArray(buf, isize);
+      buf.resize(isize);
+      fread((char*)buf.data(), 1, isize, fr);
+      bk = blocks.add_block();
+      bk->ParseFromArray(buf.data(), isize);
   }
-  free(buf);
   fclose(fr);
 }
 
@@ -158,6 +158,10 @@ inline void normsqr_col(float** m, int d, int size, float* norm) {
     for(int i=0; i<d; i++) {
         for(int j=0; j<size; j++) norm[i] += m[j][i]*m[j][i];
     }
+}
+
+inline int padding(int dim) {
+    return ((dim*sizeof(float)-1)/CACHE_LINE_SIZE*CACHE_LINE_SIZE+CACHE_LINE_SIZE)/sizeof(float);
 }
 
 #endif

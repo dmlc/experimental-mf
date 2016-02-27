@@ -5,21 +5,32 @@
 
 class SgldReadFilter: public tbb::filter {
 public:
-  mf::Blocks& blocks_;
   DPMF& dpmf_;
+  std::vector<std::vector<char> > pool_;
+  FILE* fr_;
+  int pool_size_;
   int index_;
+  uint32 isize_;
 public:
-  SgldReadFilter(mf::Blocks& blocks, DPMF& dpmf)
-    : tbb::filter(serial_in_order), blocks_(blocks), index_(0), dpmf_(dpmf) {}
-  ~SgldReadFilter() {
+SgldReadFilter(DPMF& dpmf, FILE* fr)
+    : tbb::filter(serial_in_order), index_(0), dpmf_(dpmf), fr_(fr) {
+      pool_.resize(dpmf_.data_in_fly_*10);
+      pool_size_ = pool_.size();
   }
-  //Branch misprediction at 1 per iteration
+  ~SgldReadFilter() {}
   void* operator()(void*) {
-      if(index_ < blocks_.block_size()) {
-          const mf::Block& bk = blocks_.block(index_++);
-          return (void*)&bk;
-      } else return NULL;
-    }
+      if(fread(&isize_,1,sizeof(isize_),fr_)) {
+          pool_[index_].resize(isize_);
+          fread((char*)pool_[index_].data(),1,isize_,fr_);
+          std::vector<char>& b = pool_[index_++];
+          index_ %= pool_size_;
+          return &b;
+      }
+      else {
+          fseek(fr_, 0, SEEK_SET);
+          return NULL;
+      }
+  }
 };
 
 
@@ -28,13 +39,13 @@ class SgldFilter: public tbb::filter {
 public:
   SgldFilter(DPMF& dpmf): tbb::filter(parallel), dpmf_(dpmf) {}
   void* operator()(void* block) {
-    float q[dpmf_.dim_]={0.0};
-    float p[dpmf_.dim_];
+    float q[dpmf_.dim_] __attribute__((aligned(CACHE_LINE_SIZE)));
+    float p[dpmf_.dim_] __attribute__((aligned(CACHE_LINE_SIZE)));
     mf::Block* bk = (mf::Block*)block;
     const float eta = dpmf_.eta_;
     const float scal = eta*dpmf_.ntrain_*dpmf_.bound_*dpmf_.lambda_r_;
-    int vid, rating, j, i, gc, vc, uc;
-    float error;
+    int vid, j, i, gc, vc, uc;
+    float error, rating;
     for(i=0; i<bk->user_size(); i++) {
         const mf::User& user = bk->user(i);
         const int uid = user.uid();
