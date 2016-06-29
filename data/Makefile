@@ -20,7 +20,7 @@ endif
 SOURCE = getdata.cc blocks.pb.cc
 
 all: $(SOURCE)
-	$(CC) $(CCFLAGS) -I$(USR_INCLUDE) -L$(USR_LIB) $(SOURCE) -o getdata $(LDFLAGS) -DDETAILS -fopenmp
+	$(CC) $(CCFLAGS) -I$(USR_INCLUDE) -L$(USR_LIB) -L$(LIB) $(SOURCE) -o getdata $(LDFLAGS) -DDETAILS -fopenmp
 
 clean:
 	rm -f *.o getdata
